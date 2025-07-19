@@ -14,5 +14,6 @@ public class P_flashLight : MonoBehaviour,IInteractable
         lightObject.SetActive(true); // Toggle the light's active state
         spotLight.SetActive(true); // Toggle the spotlight's active state
         Destroy(gameObject); // Remove the pickup from the scene
+        QuestManager.Instance.CompleteObjective("Quest_1", "GetFlashLight"); // Mark the objective as complete
     }
 }

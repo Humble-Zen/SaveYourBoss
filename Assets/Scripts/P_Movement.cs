@@ -6,16 +6,18 @@ public class P_Movement : MonoBehaviour
     [Header("Movement")]
     public float walkSpeed = 5f;
     public float runSpeed = 10f;
-    //public CharacterController controller;
     public float gravity = -9.81f;
+    public float movementSmoothing = 10f; // Smoothing for movement input
     private float verticalVelocity = 0f;
+    private Vector3 smoothedMovementInput;
 
     [Header("Bob Settings")]
     public float walkBobSpeed = 8f;
-    public float walkBobAmount = 0.2f; // Increased for more visible effect
+    public float walkBobAmount = 0.2f;
     public float runBobSpeed = 14f;
-    public float runBobAmount = 0.3f; // Increased for more visible effect
-    public float bobRotationAmount = 5f; // Increased for more visible effect
+    public float runBobAmount = 0.3f;
+    public float bobRotationAmount = 5f;
+    public float bobSmoothSpeed = 10f; // Smoothing for head bob transitions
     private Vector3 camInitialLocalPos;
     private Quaternion camInitialLocalRot;
     private float bobTimer = 0f;
@@ -23,7 +25,10 @@ public class P_Movement : MonoBehaviour
     [Header("Mouse Look")]
     public Transform playerCamera;
     public float mouseSensitivity = 100f;
+    public float mouseSmoothing = 5f; // Mouse smoothing
     private float xRotation = 0f;
+    private Vector2 mouseLookVelocity;
+    private Vector2 currentMouseDelta;
 
     [Header("FOV Settings")]
     public Camera cam;
@@ -36,17 +41,19 @@ public class P_Movement : MonoBehaviour
     public AudioClip[] footstepSounds;
     public float footstepVolumeWalk = 0.5f;
     public float footstepVolumeRun = 0.7f;
+    public float minFootstepInterval = 0.3f; // Minimum time between footsteps
 
     [Header("Debug")]
     public bool showDebugInfo = true;
 
     [Header("Ground Check")]
-    public LayerMask groundMask; // Default layer
+    public LayerMask groundMask;
     public float groundCheckDistance = 0.1f;
 
     private CharacterController controller;
     private bool isMoving = false;
     private float lastFootstepTime = 0f;
+    private bool wasMoving = false; // Track previous movement state
 
     void Start()
     {
@@ -108,18 +115,23 @@ public class P_Movement : MonoBehaviour
         bool isRunning = Input.GetKey(KeyCode.LeftShift);
         float currentSpeed = isRunning ? runSpeed : walkSpeed;
 
+        // Get raw input
         float moveX = Input.GetAxis("Horizontal");
         float moveZ = Input.GetAxis("Vertical");
+        Vector3 targetMovementInput = new Vector3(moveX, 0f, moveZ);
 
-        Vector3 move = transform.right * moveX + transform.forward * moveZ;
+        // Smooth the movement input to reduce twitchiness
+        smoothedMovementInput = Vector3.Lerp(smoothedMovementInput, targetMovementInput, movementSmoothing * Time.deltaTime);
+
+        Vector3 move = transform.right * smoothedMovementInput.x + transform.forward * smoothedMovementInput.z;
 
         // Apply horizontal movement
         move *= currentSpeed;
 
-        // Apply gravity
-        if (controller.isGrounded)
+        // Apply gravity with smoother grounding
+        if (controller.isGrounded && verticalVelocity < 0)
         {
-            verticalVelocity = -1f;  // small downward force to keep grounded
+            verticalVelocity = -2f;  // Small downward force to keep grounded
         }
         else
         {
@@ -130,23 +142,41 @@ public class P_Movement : MonoBehaviour
 
         controller.Move(move * Time.deltaTime);
 
-        // Update movement state
-        isMoving = (Mathf.Abs(moveX) > 0.1f || Mathf.Abs(moveZ) > 0.1f);
-    }
+        // Update movement state with hysteresis to prevent rapid state changes
+        float movementThreshold = 0.1f;
+        bool currentlyMoving = (smoothedMovementInput.magnitude > movementThreshold);
 
+        // Use hysteresis: harder to start moving, easier to keep moving
+        if (!isMoving && currentlyMoving)
+        {
+            isMoving = smoothedMovementInput.magnitude > movementThreshold;
+        }
+        else if (isMoving && !currentlyMoving)
+        {
+            isMoving = smoothedMovementInput.magnitude > movementThreshold * 0.5f;
+        }
+
+        wasMoving = isMoving;
+    }
 
     void HandleMouseLook()
     {
         if (playerCamera == null) return;
 
-        float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity * Time.deltaTime;
-        float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity * Time.deltaTime;
+        // Get raw mouse input
+        Vector2 rawMouseDelta = new Vector2(
+            Input.GetAxis("Mouse X") * mouseSensitivity,
+            Input.GetAxis("Mouse Y") * mouseSensitivity
+        );
 
-        xRotation -= mouseY;
+        // Smooth mouse input to reduce jerkiness
+        currentMouseDelta = Vector2.Lerp(currentMouseDelta, rawMouseDelta, mouseSmoothing * Time.deltaTime);
+
+        xRotation -= currentMouseDelta.y * Time.deltaTime;
         xRotation = Mathf.Clamp(xRotation, -90f, 90f);
 
         // Apply horizontal rotation to player body
-        transform.Rotate(Vector3.up * mouseX);
+        transform.Rotate(Vector3.up * currentMouseDelta.x * Time.deltaTime);
     }
 
     void HandleFOV()
@@ -164,7 +194,6 @@ public class P_Movement : MonoBehaviour
 
         bool isRunning = Input.GetKey(KeyCode.LeftShift);
 
-        // Use isMoving instead of requiring isGrounded - more reliable
         if (isMoving)
         {
             float currentBobSpeed = isRunning ? runBobSpeed : walkBobSpeed;
@@ -172,19 +201,20 @@ public class P_Movement : MonoBehaviour
 
             bobTimer += Time.deltaTime * currentBobSpeed;
 
-            // Calculate bob offsets
+            // Calculate bob offsets with smoother transitions
             float bobOffsetY = Mathf.Sin(bobTimer) * currentBobAmount;
             float bobOffsetX = Mathf.Cos(bobTimer * 0.5f) * currentBobAmount * 0.5f;
 
-            // Apply position bob
+            // Apply position bob with smoothing
             Vector3 targetPos = camInitialLocalPos + new Vector3(bobOffsetX, bobOffsetY, 0f);
-            playerCamera.localPosition = targetPos;
+            playerCamera.localPosition = Vector3.Lerp(playerCamera.localPosition, targetPos, bobSmoothSpeed * Time.deltaTime);
 
             // Apply rotation bob combined with mouse look
             float tiltZ = Mathf.Sin(bobTimer) * bobRotationAmount;
-            playerCamera.localRotation = Quaternion.Euler(xRotation, 0f, tiltZ);
+            Quaternion targetRotation = Quaternion.Euler(xRotation, 0f, tiltZ);
+            playerCamera.localRotation = Quaternion.Lerp(playerCamera.localRotation, targetRotation, bobSmoothSpeed * Time.deltaTime);
 
-            // Handle footstep sounds - play when the bob hits the lowest point
+            // Handle footstep sounds with improved timing
             HandleFootsteps(isRunning);
         }
         else
@@ -193,14 +223,17 @@ public class P_Movement : MonoBehaviour
             playerCamera.localPosition = Vector3.Lerp(
                 playerCamera.localPosition,
                 camInitialLocalPos,
-                Time.deltaTime * walkBobSpeed
+                bobSmoothSpeed * Time.deltaTime
             );
 
             playerCamera.localRotation = Quaternion.Lerp(
                 playerCamera.localRotation,
                 Quaternion.Euler(xRotation, 0f, 0f),
-                Time.deltaTime * walkBobSpeed
+                bobSmoothSpeed * Time.deltaTime
             );
+
+            // Reset bob timer gradually when stopping
+            bobTimer = Mathf.Lerp(bobTimer, 0f, Time.deltaTime * 2f);
         }
     }
 
@@ -209,30 +242,17 @@ public class P_Movement : MonoBehaviour
         if (audioSource == null || footstepSounds == null || footstepSounds.Length == 0)
             return;
 
-        // Calculate when to play footsteps based on the bob cycle
-        float stepInterval = isRunning ? (2f * Mathf.PI) / runBobSpeed : (2f * Mathf.PI) / walkBobSpeed;
+        // Simplified footstep timing based on movement speed and time
+        float stepInterval = isRunning ? 0.35f : 0.5f;
 
-        // Play footstep when the sin wave crosses zero going down (foot hits ground)
-        float previousBobPhase = (bobTimer - Time.deltaTime * (isRunning ? runBobSpeed : walkBobSpeed)) % (2f * Mathf.PI);
-        float currentBobPhase = bobTimer % (2f * Mathf.PI);
-
-        // Check if we crossed the footstep trigger points (0 or ?)
-        bool shouldPlayFootstep = false;
-
-        if (previousBobPhase > currentBobPhase) // Wrapped around
+        if (Time.time - lastFootstepTime > stepInterval)
         {
-            shouldPlayFootstep = true;
-        }
-        else if ((previousBobPhase < Mathf.PI && currentBobPhase >= Mathf.PI) ||
-                 (previousBobPhase < 2f * Mathf.PI && currentBobPhase >= 2f * Mathf.PI))
-        {
-            shouldPlayFootstep = true;
-        }
-
-        if (shouldPlayFootstep && Time.time - lastFootstepTime > stepInterval * 0.8f)
-        {
-            PlayFootstepSound(isRunning);
-            lastFootstepTime = Time.time;
+            // Additional check: only play if we've moved a minimum distance
+            if (smoothedMovementInput.magnitude > 0.3f)
+            {
+                PlayFootstepSound(isRunning);
+                lastFootstepTime = Time.time;
+            }
         }
     }
 
@@ -260,7 +280,8 @@ public class P_Movement : MonoBehaviour
             Debug.Log($"bobTimer: {bobTimer}");
             Debug.Log($"Camera local pos: {playerCamera.localPosition}");
             Debug.Log($"Camera local rot: {playerCamera.localRotation}");
-            Debug.Log($"Input H: {Input.GetAxis("Horizontal")}, V: {Input.GetAxis("Vertical")}");
+            Debug.Log($"Raw Input H: {Input.GetAxis("Horizontal")}, V: {Input.GetAxis("Vertical")}");
+            Debug.Log($"Smoothed Input: {smoothedMovementInput}");
         }
     }
 

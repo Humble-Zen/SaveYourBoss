@@ -1,63 +1,55 @@
-// QuestManager.cs
+using NUnit.Framework.Interfaces;
 using System.Collections.Generic;
-using TMPro;
 using UnityEngine;
 
 public class QuestManager : MonoBehaviour
 {
-    [Header("Define your quest steps in order")]
-    public List<Quests> questSteps = new List<Quests>();
+    public static QuestManager Instance;
+    public List<QuestData> activeQuests;
 
-    private int currentStepIndex = 0;
-
-    [Header("UI")]
-    public TextMeshProUGUI fetch;
-    public TextMeshProUGUI deliver;
-    // Called by interactable objects
-
-    private void Start()
+    void Awake()
     {
-        fetch.text = "Get the post from the postoffice";
+        if (Instance == null) Instance = this;
+        else Destroy(gameObject);
     }
-    public void CheckInteraction(GameObject interactedObject)
+
+    public void StartQuest(QuestData quest)
     {
-        if (currentStepIndex >= questSteps.Count)
+        if (!activeQuests.Contains(quest))
         {
-            Debug.Log("? All quest steps complete!");
-            return;
-        }
-
-        Quests currentStep = questSteps[currentStepIndex];
-        Quests nextStep = currentStepIndex + 1 < questSteps.Count ? questSteps[currentStepIndex + 1] : null;
-        if (interactedObject == currentStep.targetObject)
-        {
-            currentStep.isCompleted = true;
-            Debug.Log($"? Completed Step: {currentStep.stepName}");
-            //fetch.text = $"You completed this : {currentStep.stepName}";
-            deliver.text = $"Deliver the post to : {nextStep.stepName}";
-            currentStepIndex++;
-
-            if (currentStepIndex < questSteps.Count)
-            {
-                Debug.Log($"?? Next Step: {questSteps[currentStepIndex].stepName}");
-            }
-            else
-            {
-                Debug.Log("?? All quests complete!");
-            }
-        }
-        else
-        {
-            Debug.Log($"? That's not the correct target! Current step: {currentStep.stepName}");
+            activeQuests.Add(quest);
+            Debug.Log($"Started Quest: {quest.title}");
         }
     }
 
-    public Quests GetCurrentStep()
+    public void CompleteObjective(string questID, string objectiveName)
     {
-        if (currentStepIndex < questSteps.Count)
+        var quest = activeQuests.Find(q => q.questID == questID);
+        if (quest != null)
         {
-            return questSteps[currentStepIndex];
+            foreach (var obj in quest.objectives)
+            {
+                if (obj.objectiveName == objectiveName)
+                {
+                    obj.isComplete = true;
+                    Debug.Log($"Completed Objective: {objectiveName}");
+
+                    if (AllObjectivesComplete(quest))
+                    {
+                        quest.isCompleted = true;
+                        Debug.Log($"Quest Completed: {quest.title}");
+                        
+                    }
+                    return;
+                }
+            }
         }
-        return null;
+    }
+
+    private bool AllObjectivesComplete(QuestData quest)
+    {
+        foreach (var obj in quest.objectives)
+            if (!obj.isComplete) return false;
+        return true;
     }
 }

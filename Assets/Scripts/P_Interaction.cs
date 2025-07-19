@@ -28,7 +28,7 @@ public class P_Interaction : MonoBehaviour
         {
             currentInteractable = hit.collider.GetComponent<IInteractable>();
             Debug.DrawLine(ray.origin, hit.point, Color.red);
-            Debug.Log("Interactable object found: " + hit.collider.name);
+            //Debug.Log("Interactable object found: " + hit.collider.name);
         }
         else
         {
