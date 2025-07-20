@@ -28,7 +28,11 @@ public class ZombieAI : MonoBehaviour
         agent = GetComponent<NavMeshAgent>();
         animator = GetComponent<Animator>();
         rb = GetComponentsInChildren<Rigidbody>();
-
+        foreach (Rigidbody r in rb)
+        {
+            r.isKinematic = true; // Start with ragdoll disabled
+        }
+        //rb.isKinematic = true; // Start with ragdoll disabled
         // Make sure each AudioSource is properly assigned in the Inspector
         if (bulletHitSound == null || deathSound == null || chaseSound == null || attackSound == null)
         {
