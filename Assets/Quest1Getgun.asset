@@ -18,7 +18,9 @@ MonoBehaviour:
     gun
   objectives:
   - objectiveName: GetFlashLight
-    isComplete: 1
+    isComplete: 0
   - objectiveName: GetGun
+    isComplete: 0
+  - objectiveName: CollectTomatoes
     isComplete: 0
   isCompleted: 0

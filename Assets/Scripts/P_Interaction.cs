@@ -24,25 +24,44 @@ public class P_Interaction : MonoBehaviour
     {
         Ray ray = playerCam.ScreenPointToRay(screenCenter);
         RaycastHit hit;
+
         if (Physics.Raycast(ray, out hit, interactionDistance, interActable))
         {
             currentInteractable = hit.collider.GetComponent<IInteractable>();
             Debug.DrawLine(ray.origin, hit.point, Color.red);
-            //Debug.Log("Interactable object found: " + hit.collider.name);
+
+            Renderer rend = hit.collider.GetComponent<Renderer>();
+            if (rend != null)
+            {
+                // Enable glow (emission)
+                rend.material.EnableKeyword("_EMISSION");
+                rend.material.SetColor("_EmissionColor", Color.green * 2f); // Glow intensity
+            }
         }
         else
         {
+            // If previously highlighted object exists, remove glow
+            if (currentInteractable != null)
+            {
+                Renderer prevRend = (currentInteractable as MonoBehaviour).GetComponent<Renderer>();
+                if (prevRend != null)
+                {
+                    prevRend.material.SetColor("_EmissionColor", Color.black);
+                    prevRend.material.DisableKeyword("_EMISSION");
+                }
+            }
+
             currentInteractable = null;
         }
     }
-
     public void executeInteraction()
     {
-        if ((currentInteractable!=null && Input.GetKeyDown(KeyCode.E)))
+        if ((currentInteractable != null && Input.GetKeyDown(KeyCode.E)))
         {
             currentInteractable.Interact();
             currentInteractable = null; // Reset after interaction
         }
-        
+
     }
 }
+
